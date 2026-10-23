@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sales Analysis Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.0/papaparse.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .chart-container {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900">Sales Analysis Dashboard</h1>
+            <p class="text-gray-600">An interactive overview of sales performance based on the MeriSkill project data.</p>
+        </header>
+
+        <!-- File Input -->
+        <div class="mb-8 bg-white p-6 rounded-xl shadow-md">
+            <label for="csv-file" class="block mb-2 text-lg font-semibold text-gray-700">1. Select Sales Data CSV File</label>
+            <p class="text-sm text-gray-500 mb-4">Please select the `Sales Data.csv` file from your computer to generate the dashboard.</p>
+            <input type="file" id="csv-file" accept=".csv" class="block w-full text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 cursor-pointer focus:outline-none file:mr-4 file:py-2 file:px-4 file:rounded-l-lg file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100">
+        </div>
+
+
+        <!-- Initial Prompt / Loading State -->
+        <div id="initial-prompt" class="text-center py-16 bg-white rounded-xl shadow-md">
+            <p class="text-lg font-semibold">Please select your 'Sales Data.csv' file above to begin.</p>
+        </div>
+
+        <!-- Dashboard Content -->
+        <div id="dashboard" class="hidden">
+            <!-- KPIs -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h2 class="text-gray-500 text-sm font-medium">Total Revenue</h2>
+                    <p id="total-revenue" class="text-3xl font-bold mt-1"></p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h2 class="text-gray-500 text-sm font-medium">Total Orders</h2>
+                    <p id="total-orders" class="text-3xl font-bold mt-1"></p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h2 class="text-gray-500 text-sm font-medium">Average Order Value</h2>
+                    <p id="avg-order-value" class="text-3xl font-bold mt-1"></p>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h3 class="text-xl font-semibold mb-4">Sales by Month</h3>
+                    <div class="chart-container">
+                        <canvas id="salesByMonthChart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h3 class="text-xl font-semibold mb-4">Top 5 Selling Products</h3>
+                    <div class="chart-container">
+                        <canvas id="topProductsChart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h3 class="text-xl font-semibold mb-4">Sales by City</h3>
+                    <div class="chart-container">
+                        <canvas id="salesByCityChart"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <h3 class="text-xl font-semibold mb-4">Best Time for Advertisements</h3>
+                    <div class="chart-container">
+                        <canvas id="salesByHourChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('csv-file').addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                return;
+            }
+
+            const prompt = document.getElementById('initial-prompt');
+            prompt.innerHTML = '<p class="text-lg font-semibold">Loading and processing data...</p>';
+
+
+            Papa.parse(file, {
+                header: true,
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    // Hide prompt and show dashboard
+                    prompt.style.display = 'none';
+                    document.getElementById('dashboard').style.display = 'block';
+                    
+                    processData(results.data);
+                },
+                error: function(error) {
+                    console.error("Error parsing CSV:", error);
+                    prompt.innerText = 'Error: Could not parse the selected file. Please ensure it is a valid CSV.';
+                }
+            });
+        });
+
+        function processData(data) {
+            // --- 1. KPI Calculations ---
+            // Clean data first: filter out rows with null or invalid Sales
+            const cleanData = data.filter(row => row && typeof row['Sales'] === 'number' && isFinite(row['Sales']));
+
+            const totalRevenue = cleanData.reduce((sum, row) => sum + row['Sales'], 0);
+            const totalOrders = new Set(cleanData.map(row => row['Order ID'])).size;
+            const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+            document.getElementById('total-revenue').innerText = `$${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            document.getElementById('total-orders').innerText = totalOrders.toLocaleString('en-US');
+            document.getElementById('avg-order-value').innerText = `$${avgOrderValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+            // --- 2. Sales by Month ---
+            const monthlySales = {};
+            const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            cleanData.forEach(row => {
+                const month = row['Month'];
+                if (month && month >= 1 && month <= 12) {
+                    if (!monthlySales[month]) {
+                        monthlySales[month] = 0;
+                    }
+                    monthlySales[month] += row['Sales'];
+                }
+            });
+            const sortedMonths = Object.keys(monthlySales).sort((a, b) => a - b);
+            const monthLabels = sortedMonths.map(m => monthNames[m - 1]);
+            const monthData = sortedMonths.map(m => monthlySales[m]);
+            renderChart('salesByMonthChart', 'bar', monthLabels, monthData, 'Monthly Revenue');
+
+            // --- 3. Top Selling Products ---
+            const productSales = {};
+            cleanData.forEach(row => {
+                const product = row['Product'];
+                const quantity = row['Quantity Ordered'];
+                if (product && quantity) {
+                    if (!productSales[product]) {
+                        productSales[product] = 0;
+                    }
+                    productSales[product] += quantity;
+                }
+            });
+            const sortedProducts = Object.entries(productSales).sort(([,a],[,b]) => b-a).slice(0, 5);
+            const productLabels = sortedProducts.map(([name]) => name);
+            const productData = sortedProducts.map(([,qty]) => qty);
+            renderChart('topProductsChart', 'bar', productLabels, productData, 'Units Sold', { indexAxis: 'y' });
+
+            // --- 4. Sales by City ---
+            const citySales = {};
+            cleanData.forEach(row => {
+                const city = row['City'];
+                const sales = row['Sales'];
+                 if (city && sales) {
+                    if (!citySales[city]) {
+                        citySales[city] = 0;
+                    }
+                    citySales[city] += sales;
+                }
+            });
+            const sortedCities = Object.entries(citySales).sort(([,a],[,b]) => b-a);
+            const cityLabels = sortedCities.map(([name]) => name);
+            const cityData = sortedCities.map(([,sales]) => sales);
+            renderChart('salesByCityChart', 'doughnut', cityLabels, cityData, 'Sales by City');
+
+            // --- 5. Sales by Hour ---
+            const hourlySales = Array(24).fill(0);
+            cleanData.forEach(row => {
+                const hour = row['Hour'];
+                if (hour !== null && hour >= 0 && hour <= 23) {
+                    hourlySales[hour]++;
+                }
+            });
+            const hourLabels = Array.from({length: 24}, (_, i) => `${i}:00`);
+            renderChart('salesByHourChart', 'line', hourLabels, hourlySales, 'Number of Orders');
+        }
+
+        // Keep a cache of charts to destroy before re-rendering
+        const chartInstances = {};
+        function renderChart(canvasId, type, labels, data, label, options = {}) {
+            if (chartInstances[canvasId]) {
+                chartInstances[canvasId].destroy();
+            }
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            chartInstances[canvasId] = new Chart(ctx, {
+                type: type,
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: label,
+                        data: data,
+                        backgroundColor: [
+                            'rgba(54, 162, 235, 0.6)',
+                            'rgba(255, 99, 132, 0.6)',
+                            'rgba(75, 192, 192, 0.6)',
+                            'rgba(255, 206, 86, 0.6)',
+                            'rgba(153, 102, 255, 0.6)',
+                            'rgba(255, 159, 64, 0.6)',
+                            'rgba(199, 199, 199, 0.6)'
+                        ],
+                        borderColor: [
+                            'rgba(54, 162, 235, 1)',
+                            'rgba(255, 99, 132, 1)',
+                            'rgba(75, 192, 192, 1)',
+                            'rgba(255, 206, 86, 1)',
+                            'rgba(153, 102, 255, 1)',
+                            'rgba(255, 159, 64, 1)',
+                            'rgba(199, 199, 199, 1)'
+                        ],
+                        borderWidth: 1,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    ...options,
+                    plugins: {
+                        legend: {
+                            display: type === 'doughnut' // Only show legend for doughnut chart
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+
+</body>
+</html>
